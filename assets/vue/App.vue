@@ -1,17 +1,15 @@
 <template>
   <div>
-    <h1>Welcome to Vue + Symfony</h1>
+    <JobList />
   </div>
 </template>
 
 <script>
-export default {
-  name: 'App'
-}
-</script>
+import JobList from './components/JobList.vue';
 
-<style>
-h1 {
-  color: blue;
-}
-</style>
+export default {
+  components: {
+    JobList
+  }
+};
+</script>
