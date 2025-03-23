@@ -9,6 +9,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Contracts\Cache\ItemInterface;
+use Symfony\Contracts\HttpClient\Exception\HttpExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 
@@ -96,17 +97,24 @@ class ApiController extends AbstractController
 
         // Validate required fields
         $requiredFields = ['job_id', 'name', 'email', 'gdpr_agreement'];
-        foreach ($requiredFields as $field) {
-            if (empty($data[$field])) {
-                return new JsonResponse(['error' => "Chybí povinné pole: {$field}"], 400);
-            }
+        $missingFields = array_filter($requiredFields, fn($field) => empty($data[$field]));
+
+        if (!empty($missingFields)) {
+            return new JsonResponse([
+                'error' => 'Chybí povinná pole: ' . implode(', ', $missingFields),
+                'flash' => 'error'
+            ], 400);
         }
 
+        // Prepare API credentials
         $apiUrl = $params->get('recruitis_api_url') . 'answers';
         $apiToken = $params->get('recruitis_api_token');
 
         if (empty($apiToken)) {
-            return new JsonResponse(['error' => 'API token není nastaven'], 500);
+            return new JsonResponse([
+                'error' => 'API token není nastaven',
+                'flash' => 'error'
+            ], 500);
         }
 
         try {
@@ -117,7 +125,7 @@ class ApiController extends AbstractController
                 "phone" => $data['phone'] ?? null,
                 "linkedin" => $data['linkedin'] ?? null,
                 "cover_letter" => $data['cover_letter'] ?? "",
-                "salary" => isset($data['salary']['amount']) && is_numeric($data['salary']['amount'])
+                "salary" => !empty($data['salary']['amount']) && is_numeric($data['salary']['amount'])
                     ? [
                         "amount" => (int) $data['salary']['amount'],
                         "currency" => $data['salary']['currency'] ?? "CZK",
@@ -130,16 +138,15 @@ class ApiController extends AbstractController
                     "date_expiration" => date("Y-m-d", strtotime("+1 year")),
                     "source" => "manual",
                 ],
-                "attachments" => array_map(function ($attachment) {
-                    return [
-                        "path" => $attachment['path'],
-                        "filename" => $attachment['filename'],
-                        "type" => $attachment['type'],
-                    ];
-                }, $data['attachments'] ?? []),
+                "attachments" => array_map(fn($attachment) => [
+                    "path" => $attachment['path'] ?? null,
+                    "filename" => $attachment['filename'] ?? 'file.pdf',
+                    "type" => $attachment['type'] ?? 1,
+                ], $data['attachments'] ?? []),
                 "send_notification" => false
             ];
 
+            // Send response to Recruitis API
             $submitResponse = $httpClient->request('POST', $apiUrl, [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $apiToken,
@@ -149,22 +156,34 @@ class ApiController extends AbstractController
                 'json' => $postData,
             ]);
 
-            if ($submitResponse->getStatusCode() === 201) {
+            $statusCode = $submitResponse->getStatusCode();
+            $responseContent = $submitResponse->getContent(false); // prevent exceptions on non-2xx responses
+
+            if ($statusCode === 201) {
                 return new JsonResponse([
                     'message' => 'Odpověď byla úspěšně odeslána. Teď budete přesměrováni na domovskou stránku.',
                     'flash' => 'success'
                 ], 201);
-            } else {
-                return new JsonResponse([
-                    'error' => 'Nepodařilo se odeslat odpověď. Zkuste to prosím znovu.',
-                    'flash' => 'error',
-                    'details' => $submitResponse->getContent()
-                ], $submitResponse->getStatusCode());
             }
 
+            return new JsonResponse([
+                'error' => 'Nepodařilo se odeslat odpověď. Zkuste to prosím znovu.',
+                'flash' => 'error',
+                'details' => json_decode($responseContent, true) ?? 'Unknown API response'
+            ], $statusCode);
+
+        } catch (HttpExceptionInterface $e) {
+            return new JsonResponse([
+                'error' => 'Chyba při komunikaci s API: ' . $e->getMessage(),
+                'flash' => 'error'
+            ], 500);
         } catch (\Exception $e) {
-            return new JsonResponse(['error' => 'Chyba při komunikaci s API', 'details' => $e->getMessage()], 500);
+            return new JsonResponse([
+                'error' => 'Neočekávaná chyba: ' . $e->getMessage(),
+                'flash' => 'error'
+            ], 500);
         }
     }
+
 
 }
