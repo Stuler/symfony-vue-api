@@ -4,7 +4,7 @@
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
-    <form @submit.prevent="submitResponse">
+    <form @submit.prevent="validateAndSubmit">
       <h4>Osobní údaje</h4>
       <div class="mb-3">
         <label class="form-label">Jméno</label>
@@ -26,7 +26,7 @@
       <h4>Platové očekávání</h4>
       <div class="mb-3">
         <label class="form-label">Požadovaná mzda</label>
-        <input type="number" class="form-control" v-model="response.salary.amount">
+        <input type="number" class="form-control" v-model="response.salary.amount" required>
       </div>
       <div class="mb-3">
         <label class="form-label">Měna</label>
@@ -43,14 +43,17 @@
         </select>
       </div>
 
-      <h4>Přílohy (Pouze CV a průvodní dopis)</h4>
+      <h4>CV</h4>
       <div class="mb-3">
         <label class="form-label">CV (Pouze .pdf, .docx, .txt)</label>
-        <input type="file" class="form-control" @change="handleFileUpload($event, 2)">
+        <input type="file" class="form-control" @change="handleFileUpload">
       </div>
-      <div class="mb-3">
-        <label class="form-label">Průvodní dopis (Pouze .pdf, .docx, .txt)</label>
-        <input type="file" class="form-control" @change="handleFileUpload($event, 1)">
+
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" v-model="response.gdpr_34" id="gdpr">
+        <label class="form-check-label" for="gdpr">
+          Souhlasím se zpracováním osobních údajů (GDPR)
+        </label>
       </div>
 
       <button type="submit" class="btn btn-success">Odeslat odpověď</button>
@@ -61,7 +64,7 @@
 
 <script>
 export default {
-  props: ["jobId", "jobTitle"], // jobTitle is now a prop, not from query
+  props: ["jobId", "jobTitle"],
   data() {
     return {
       response: {
@@ -75,32 +78,49 @@ export default {
           currency: "CZK",
           unit: "month"
         },
-        attachments: []
+        gdpr_34: true,
+        cv: [],
+        skip_validation: false, // by default, backend should validate if needed
       },
       error: null
     };
   },
   methods: {
-    async submitResponse() {
+    async validateAndSubmit() {
       try {
+        // Call the validation endpoint
+        const validationResponse = await fetch(`/api/validate/${this.jobId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(this.response),
+        });
+
+        // Ensure we properly parse the response
+        const validationData = await validationResponse.json();
+        console.log("Validation response:", validationData);
+
+        // Check if validation failed
+        if (!validationResponse.ok || !validationData.meta || validationData.meta.code !== "api.ok") {
+          throw new Error(validationData?.meta?.message || "Validace selhala.");
+        }
+
+        // Proceed with submission (skip validation since it's already done)
+        this.response.skip_validation = true;
         const response = await fetch("/api/respond", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(this.response),
         });
 
         if (!response.ok) throw new Error("Odpověď se nepodařilo odeslat.");
-
         alert("Odpověď byla úspěšně odeslána!");
         this.$router.push("/");
       } catch (error) {
-        console.error(error);
-        this.error = "Chyba při odesílání odpovědi.";
+        console.error("API Error:", error);
+        this.error = error.message || "Chyba při odesílání odpovědi.";
       }
     },
-    handleFileUpload(event, fileType) {
+    handleFileUpload(event) {
       const file = event.target.files[0];
       if (!file) return;
 
@@ -117,11 +137,10 @@ export default {
 
       const reader = new FileReader();
       reader.onload = (e) => {
-        this.response.attachments.push({
-          base64: e.target.result.split(",")[1],
+        this.response.cv = [{
           filename: file.name,
-          type: fileType // 1 = Cover Letter, 2 = CV
-        });
+          base64: e.target.result.split(",")[1]
+        }];
       };
       reader.readAsDataURL(file);
     }

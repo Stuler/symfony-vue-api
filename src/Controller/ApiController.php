@@ -92,35 +92,93 @@ class ApiController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
 
-        // Validate input
-        if (!isset($data['job_id'], $data['name'], $data['email'], $data['message'])) {
-            return new JsonResponse(['error' => 'Missing required fields'], 400);
+        // validate required fields
+        $requiredFields = ['job_id', 'name', 'email', 'gdpr_34'];
+        foreach ($requiredFields as $field) {
+            if (empty($data[$field])) {
+                return new JsonResponse(['error' => "Chybí povinné pole: {$field}"], 400);
+            }
         }
 
         try {
-            // Send data to Recruitis API
-            $apiUrl = $params->get('recruitis_api_url') . 'answers/';
-            $response = $httpClient->request('POST', $apiUrl, [
+            $jobId = $data['job_id'];
+            $apiUrlValidate = $params->get('recruitis_api_url') . "jobs/{$jobId}/form/validate";
+            $apiUrlSubmit = $params->get('recruitis_api_url') . 'answers/';
+
+            // check if frontend already validated
+            $skipValidation = $data['skip_validation'] ?? false;
+
+            if (!$skipValidation) {
+                // validate with Recruitis API
+                $validationResponse = $httpClient->request('POST', $apiUrlValidate, [
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $params->get('recruitis_api_token'),
+                        'Accept' => 'application/json',
+                        'Content-Type' => 'application/json',
+                    ],
+                    'json' => $data,
+                ]);
+
+                $validationData = $validationResponse->toArray();
+                if ($validationResponse->getStatusCode() !== 200 || $validationData['meta']['code'] !== 'api.ok') {
+                    return new JsonResponse([
+                        'error' => 'Validace selhala',
+                        'details' => $validationData['meta']['message'] ?? 'Neznámá chyba'
+                    ], 400);
+                }
+                // use validated payload
+                $data = $validationData['payload'];
+            }
+
+            $submitResponse = $httpClient->request('POST', $apiUrlSubmit, [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $params->get('recruitis_api_token'),
                     'Accept' => 'application/json',
                     'Content-Type' => 'application/json',
                 ],
-                'json' => [
-                    'job_id' => $data['job_id'],
-                    'name' => $data['name'],
-                    'email' => $data['email'],
-                    'message' => $data['message'],
-                ],
+                'json' => $data,
             ]);
 
-            if ($response->getStatusCode() === 201) {
+            if ($submitResponse->getStatusCode() === 201) {
                 return new JsonResponse(['message' => 'Odpověď byla úspěšně odeslána'], 201);
             }
 
-            return new JsonResponse(['error' => 'Nepodařilo se odeslat odpověď'], $response->getStatusCode());
+            return new JsonResponse(['error' => 'Nepodařilo se odeslat odpověď'], $submitResponse->getStatusCode());
+
         } catch (\Exception $e) {
             return new JsonResponse(['error' => 'Chyba při komunikaci s API', 'details' => $e->getMessage()], 500);
+        }
+    }
+
+    #[Route('/api/validate/{jobId}', name: 'api_validate', methods: ['POST'])]
+    public function validateJobForm(Request $request, int $jobId): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $apiUrl = "{$this->params->get('recruitis_api_url')}jobs/{$jobId}/form/validate/";
+
+        try {
+            $response = $this->httpClient->request('POST', $apiUrl, [
+                'headers' => [
+                    'Authorization' => "Bearer {$this->params->get('recruitis_api_token')}",
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                ],
+                'json' => $data,
+            ]);
+
+            $responseData = $response->toArray();
+            $meta = $responseData['meta'] ?? [];
+
+            if ($response->getStatusCode() !== 200 || ($meta['code'] ?? null) !== 'api.ok') {
+                return new JsonResponse([
+                    'error' => 'Validation failed',
+                    'details' => $meta['message'] ?? 'Unknown error'
+                ], 400);
+            }
+
+            return new JsonResponse($responseData, 200);
+        } catch (\Exception $e) {
+            return new JsonResponse(['error' => 'Error validating form', 'details' => $e->getMessage()], 500);
         }
     }
 
