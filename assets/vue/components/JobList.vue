@@ -54,7 +54,8 @@ export default {
       jobs: [],
       currentPage: 1,
       totalPages: 1,
-      limit: 5,
+      totalJobs: 0,
+      limit: 10,
       loading: false
     };
   },
@@ -69,10 +70,13 @@ export default {
         if (!response.ok) throw new Error("Failed to fetch jobs");
 
         const data = await response.json();
-        this.jobs = data.jobs;
-        this.totalPages = data.pagination.total_pages;
+
+        this.jobs = data.jobs || [];
+        this.totalPages = data.pagination?.total_pages || 1;
+        this.totalJobs = data.pagination?.total_jobs || 0;
+
       } catch (error) {
-        console.error(error);
+        console.error("Error fetching jobs:", error);
       } finally {
         this.loading = false;
       }
@@ -92,10 +96,7 @@ export default {
       }
     },
     scrollToTop() {
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth"  // Smooth scrolling effect
-      });
+      window.scrollTo({ top: 0, behavior: "smooth" });
     },
     formatDate(dateStr) {
       return new Date(dateStr).toLocaleDateString();
@@ -106,14 +107,13 @@ export default {
       return `${primaryAddress.city}, ${primaryAddress.state}`;
     },
     sanitizeHTML(html) {
-      // Parse the HTML and fix links
       let doc = new DOMParser().parseFromString(html, "text/html");
       let links = doc.querySelectorAll("a");
 
       links.forEach(link => {
         let href = link.getAttribute("href");
         if (href && !href.startsWith("http://") && !href.startsWith("https://")) {
-          link.setAttribute("href", "https://" + href); // Ensure absolute URL
+          link.setAttribute("href", "https://" + href);
         }
       });
 
@@ -152,7 +152,7 @@ button:disabled {
   max-width: 100%;
   height: auto;
   margin: 10px auto;
-  border: 5px solid #007bff; /* Blue border */
+  border: 1px solid #0c0b0b;
   border-radius: 10px; /* Rounded corners */
   padding: 5px;
   background: #ffffff;
