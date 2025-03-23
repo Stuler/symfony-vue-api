@@ -14,9 +14,12 @@
 
             <div v-html="sanitizeHTML(job.description)" class="job-description"></div>
 
-            <router-link :to="'/job-answer/' + job.job_id" class="btn btn-primary mt-3">
+            <router-link
+                :to="{ name: 'jobAnswer', params: { jobId: job.job_id }, state: { jobTitle: job.title } }"
+                class="btn btn-primary mt-3">
               Odpovědět na nabídku
             </router-link>
+
 
           </div>
         </div>
