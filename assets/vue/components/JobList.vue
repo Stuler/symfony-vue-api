@@ -2,10 +2,8 @@
   <div class="container mt-4">
     <h1 class="text-center">Seznam nabídek</h1>
 
-    <!-- Show loading message -->
     <div v-if="loading" class="alert alert-info text-center">Nahrávam nabídky...</div>
 
-    <!-- Show jobs -->
     <div v-if="jobs.length" class="row">
       <div class="col-md-6" v-for="job in jobs" :key="job.job_id">
         <div class="card mb-4 shadow-sm">
@@ -14,14 +12,17 @@
             <p class="text-muted"><strong>Created:</strong> {{ formatDate(job.date_created) }}</p>
             <p class="text-muted"><strong>Location:</strong> {{ getLocation(job.addresses) }}</p>
 
-            <!-- Description with images wrapped in frame -->
             <div v-html="sanitizeHTML(job.description)" class="job-description"></div>
+
+            <router-link :to="'/job-answer/' + job.job_id" class="btn btn-primary mt-3">
+              Odpovědět na nabídku
+            </router-link>
+
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Show no jobs message -->
     <div v-else-if="!loading" class="alert alert-warning text-center">Žádná nabídka nebyla nalezena</div>
 
     <!-- Pagination -->

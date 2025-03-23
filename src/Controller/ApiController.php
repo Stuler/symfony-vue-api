@@ -82,4 +82,46 @@ class ApiController extends AbstractController
             return new JsonResponse(['error' => 'Failed to fetch jobs', 'details' => $e->getMessage()], 500);
         }
     }
+
+    #[Route('/api/respond', name: 'api_respond', methods: ['POST'])]
+    public function respondToJob(
+        Request $request,
+        HttpClientInterface $httpClient,
+        ParameterBagInterface $params
+    ): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+
+        // Validate input
+        if (!isset($data['job_id'], $data['name'], $data['email'], $data['message'])) {
+            return new JsonResponse(['error' => 'Missing required fields'], 400);
+        }
+
+        try {
+            // Send data to Recruitis API
+            $apiUrl = $params->get('recruitis_api_url') . 'answers/';
+            $response = $httpClient->request('POST', $apiUrl, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $params->get('recruitis_api_token'),
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                ],
+                'json' => [
+                    'job_id' => $data['job_id'],
+                    'name' => $data['name'],
+                    'email' => $data['email'],
+                    'message' => $data['message'],
+                ],
+            ]);
+
+            if ($response->getStatusCode() === 201) {
+                return new JsonResponse(['message' => 'Odpověď byla úspěšně odeslána'], 201);
+            }
+
+            return new JsonResponse(['error' => 'Nepodařilo se odeslat odpověď'], $response->getStatusCode());
+        } catch (\Exception $e) {
+            return new JsonResponse(['error' => 'Chyba při komunikaci s API', 'details' => $e->getMessage()], 500);
+        }
+    }
+
 }
