@@ -1,5 +1,7 @@
 <template>
   <div class="container mt-4">
+    <flash-message :message="flashMessage" :type="flashType" />
+
     <h1>Odpovědět na nabídku: {{ jobTitle }}</h1>
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
@@ -36,21 +38,16 @@
         </select>
       </div>
       <div class="mb-3">
-        <label class="form-label">Jednotka</label>
-        <select class="form-control" v-model="response.salary.unit">
-          <option value="month">Měsíc</option>
-          <option value="hour">Hodina</option>
-        </select>
-      </div>
-
-      <h4>CV</h4>
-      <div class="mb-3">
         <label class="form-label">CV (Pouze .pdf, .docx, .txt)</label>
-        <input type="file" class="form-control" @change="handleFileUpload">
+        <input type="file" class="form-control" @change="handleFileUpload($event, 2)">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Průvodní dopis (Pouze .pdf, .docx, .txt)</label>
+        <input type="file" class="form-control" @change="handleFileUpload($event, 1)">
       </div>
 
       <div class="form-check">
-        <input class="form-check-input" type="checkbox" v-model="response.gdpr_34" id="gdpr">
+        <input class="form-check-input" type="checkbox" v-model="response.gdpr_agreement" id="gdpr">
         <label class="form-check-label" for="gdpr">
           Souhlasím se zpracováním osobních údajů (GDPR)
         </label>
@@ -62,8 +59,12 @@
   </div>
 </template>
 
+
 <script>
+import FlashMessage from "../components/FlashMessage.vue"; // Import Flash Message
+
 export default {
+  components: { FlashMessage },
   props: ["jobId", "jobTitle"],
   data() {
     return {
@@ -78,10 +79,11 @@ export default {
           currency: "CZK",
           unit: "month"
         },
-        gdpr_34: true,
-        cv: [],
-        skip_validation: false, // by default, backend should validate if needed
+        gdpr_agreement: true,
+        attachments: []
       },
+      flashMessage: null,
+      flashType: "success",
       error: null
     };
   },

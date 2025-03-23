@@ -37,6 +37,9 @@ class ApiController extends AbstractController
     {
         $apiUrl = $this->params->get('recruitis_api_url') . 'jobs/';
         $apiToken = $this->params->get('recruitis_api_token');
+        if (empty($apiToken)) {
+            return new JsonResponse(['error' => 'API token není nastaven'], 500);
+        }
 
         $page = max(1, (int)$request->query->get('page', 1));
         $limit = 5;
@@ -88,62 +91,76 @@ class ApiController extends AbstractController
         Request $request,
         HttpClientInterface $httpClient,
         ParameterBagInterface $params
-    ): JsonResponse
-    {
+    ): JsonResponse {
         $data = json_decode($request->getContent(), true);
 
-        // validate required fields
-        $requiredFields = ['job_id', 'name', 'email', 'gdpr_34'];
+        // Validate required fields
+        $requiredFields = ['job_id', 'name', 'email', 'gdpr_agreement'];
         foreach ($requiredFields as $field) {
             if (empty($data[$field])) {
                 return new JsonResponse(['error' => "Chybí povinné pole: {$field}"], 400);
             }
         }
 
+        $apiUrl = $params->get('recruitis_api_url') . 'answers';
+        $apiToken = $params->get('recruitis_api_token');
+
+        if (empty($apiToken)) {
+            return new JsonResponse(['error' => 'API token není nastaven'], 500);
+        }
+
         try {
-            $jobId = $data['job_id'];
-            $apiUrlValidate = $params->get('recruitis_api_url') . "jobs/{$jobId}/form/validate";
-            $apiUrlSubmit = $params->get('recruitis_api_url') . 'answers/';
+            $postData = [
+                "job_id" => (int) $data['job_id'],
+                "name" => trim($data['name']),
+                "email" => trim($data['email']),
+                "phone" => $data['phone'] ?? null,
+                "linkedin" => $data['linkedin'] ?? null,
+                "cover_letter" => $data['cover_letter'] ?? "",
+                "salary" => isset($data['salary']['amount']) && is_numeric($data['salary']['amount'])
+                    ? [
+                        "amount" => (int) $data['salary']['amount'],
+                        "currency" => $data['salary']['currency'] ?? "CZK",
+                        "unit" => $data['salary']['unit'] ?? "month",
+                        "type" => $data['salary']['type'] ?? 0,
+                        "note" => $data['salary']['note'] ?? "",
+                    ]
+                    : null,
+                "gdpr_agreement" => [
+                    "date_expiration" => date("Y-m-d", strtotime("+1 year")),
+                    "source" => "manual",
+                ],
+                "attachments" => array_map(function ($attachment) {
+                    return [
+                        "path" => $attachment['path'],
+                        "filename" => $attachment['filename'],
+                        "type" => $attachment['type'],
+                    ];
+                }, $data['attachments'] ?? []),
+                "send_notification" => false
+            ];
 
-            // check if frontend already validated
-            $skipValidation = $data['skip_validation'] ?? false;
-
-            if (!$skipValidation) {
-                // validate with Recruitis API
-                $validationResponse = $httpClient->request('POST', $apiUrlValidate, [
-                    'headers' => [
-                        'Authorization' => 'Bearer ' . $params->get('recruitis_api_token'),
-                        'Accept' => 'application/json',
-                        'Content-Type' => 'application/json',
-                    ],
-                    'json' => $data,
-                ]);
-
-                $validationData = $validationResponse->toArray();
-                if ($validationResponse->getStatusCode() !== 200 || $validationData['meta']['code'] !== 'api.ok') {
-                    return new JsonResponse([
-                        'error' => 'Validace selhala',
-                        'details' => $validationData['meta']['message'] ?? 'Neznámá chyba'
-                    ], 400);
-                }
-                // use validated payload
-                $data = $validationData['payload'];
-            }
-
-            $submitResponse = $httpClient->request('POST', $apiUrlSubmit, [
+            $submitResponse = $httpClient->request('POST', $apiUrl, [
                 'headers' => [
-                    'Authorization' => 'Bearer ' . $params->get('recruitis_api_token'),
+                    'Authorization' => 'Bearer ' . $apiToken,
                     'Accept' => 'application/json',
                     'Content-Type' => 'application/json',
                 ],
-                'json' => $data,
+                'json' => $postData,
             ]);
 
             if ($submitResponse->getStatusCode() === 201) {
-                return new JsonResponse(['message' => 'Odpověď byla úspěšně odeslána'], 201);
+                return new JsonResponse([
+                    'message' => 'Odpověď byla úspěšně odeslána. Teď budete přesměrováni na domovskou stránku.',
+                    'flash' => 'success'
+                ], 201);
+            } else {
+                return new JsonResponse([
+                    'error' => 'Nepodařilo se odeslat odpověď. Zkuste to prosím znovu.',
+                    'flash' => 'error',
+                    'details' => $submitResponse->getContent()
+                ], $submitResponse->getStatusCode());
             }
-
-            return new JsonResponse(['error' => 'Nepodařilo se odeslat odpověď'], $submitResponse->getStatusCode());
 
         } catch (\Exception $e) {
             return new JsonResponse(['error' => 'Chyba při komunikaci s API', 'details' => $e->getMessage()], 500);
