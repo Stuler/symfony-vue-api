@@ -150,36 +150,4 @@ class ApiController extends AbstractController
         }
     }
 
-    #[Route('/api/validate/{jobId}', name: 'api_validate', methods: ['POST'])]
-    public function validateJobForm(Request $request, int $jobId): JsonResponse
-    {
-        $data = json_decode($request->getContent(), true);
-        $apiUrl = "{$this->params->get('recruitis_api_url')}jobs/{$jobId}/form/validate/";
-
-        try {
-            $response = $this->httpClient->request('POST', $apiUrl, [
-                'headers' => [
-                    'Authorization' => "Bearer {$this->params->get('recruitis_api_token')}",
-                    'Accept' => 'application/json',
-                    'Content-Type' => 'application/json',
-                ],
-                'json' => $data,
-            ]);
-
-            $responseData = $response->toArray();
-            $meta = $responseData['meta'] ?? [];
-
-            if ($response->getStatusCode() !== 200 || ($meta['code'] ?? null) !== 'api.ok') {
-                return new JsonResponse([
-                    'error' => 'Validation failed',
-                    'details' => $meta['message'] ?? 'Unknown error'
-                ], 400);
-            }
-
-            return new JsonResponse($responseData, 200);
-        } catch (\Exception $e) {
-            return new JsonResponse(['error' => 'Error validating form', 'details' => $e->getMessage()], 500);
-        }
-    }
-
 }

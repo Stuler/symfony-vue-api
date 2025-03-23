@@ -4,7 +4,7 @@
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
-    <form @submit.prevent="validateAndSubmit">
+    <form @submit.prevent="submitResponse">
       <h4>Osobní údaje</h4>
       <div class="mb-3">
         <label class="form-label">Jméno</label>
@@ -86,38 +86,30 @@ export default {
     };
   },
   methods: {
-    async validateAndSubmit() {
+    async submitResponse() {
       try {
-        // Call the validation endpoint
-        const validationResponse = await fetch(`/api/validate/${this.jobId}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(this.response),
-        });
-
-        // Ensure we properly parse the response
-        const validationData = await validationResponse.json();
-        console.log("Validation response:", validationData);
-
-        // Check if validation failed
-        if (!validationResponse.ok || !validationData.meta || validationData.meta.code !== "api.ok") {
-          throw new Error(validationData?.meta?.message || "Validace selhala.");
-        }
-
-        // Proceed with submission (skip validation since it's already done)
-        this.response.skip_validation = true;
         const response = await fetch("/api/respond", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(this.response),
         });
 
-        if (!response.ok) throw new Error("Odpověď se nepodařilo odeslat.");
-        alert("Odpověď byla úspěšně odeslána!");
-        this.$router.push("/");
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Odpověď se nepodařilo odeslat.");
+
+        // Show Flash Message
+        this.flashMessage = "Odpověď byla úspěšně odeslána!";
+        this.flashType = "success";
+
+        // Hide message after 3 seconds & redirect
+        setTimeout(() => {
+          this.flashMessage = null;
+          this.$router.push("/");
+        }, 3000);
       } catch (error) {
-        console.error("API Error:", error);
-        this.error = error.message || "Chyba při odesílání odpovědi.";
+        console.error(error);
+        this.flashMessage = error.message || "Chyba při odesílání odpovědi.";
+        this.flashType = "error";
       }
     },
     handleFileUpload(event) {
