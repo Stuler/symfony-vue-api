@@ -3,8 +3,6 @@
 namespace App\Model\Service;
 
 use RuntimeException;
-use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
-use Symfony\Contracts\Cache\CacheInterface;
 use Symfony\Contracts\HttpClient\Exception\HttpExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -15,21 +13,12 @@ class RecruitisApiService
 
     public function __construct(
         private readonly HttpClientInterface $httpClient,
-        private readonly ParameterBagInterface $params,
-        private readonly CacheInterface $cache
+        string $apiUrl,
+        string $apiToken
     ) {
-        $this->setApiUrl();
-        $this->setApiToken();
-    }
+        $this->apiUrl = rtrim($apiUrl, '/') . '/';
+        $this->apiToken = $apiToken;
 
-    private function setApiUrl(): void
-    {
-        $this->apiUrl = rtrim($this->params->get('recruitis_api_url'), '/') . '/';
-    }
-
-    private function setApiToken(): void
-    {
-        $this->apiToken = $this->params->get('recruitis_api_token');
         if (empty($this->apiToken)) {
             throw new RuntimeException('API token není nastaven.');
         }
@@ -40,62 +29,61 @@ class RecruitisApiService
      */
     public function fetchJobs(int $page, int $limit): array
     {
-        $cacheKey = "jobs_{$page}_limit_{$limit}";
+        try {
+            $response = $this->httpClient->request('GET', $this->apiUrl . 'jobs/', [
+                'headers' => $this->getApiHeaders(),
+                'query' => [
+                    'page' => $page,
+                    'limit' => min($limit, 50),
+                    'activity_state' => 1,
+                    'access_state' => 1,
+                    'order_by' => 'date_created'
+                ]
+            ]);
 
-        return $this->cache->get($cacheKey, function () use ($page, $limit) {
-            try {
-                $response = $this->httpClient->request('GET', $this->apiUrl . 'jobs/', [
-                    'headers' => $this->getApiHeaders(),
-                    'query' => [
-                        'page' => $page,
-                        'limit' => min($limit, 50),
-                        'activity_state' => 1,
-                        'access_state' => 1,
-                        'order_by' => 'date_created'
-                    ]
-                ]);
-
-                $responseData = json_decode($response->getContent(false), true);
-
-                if ($response->getStatusCode() !== 200) {
-                    throw new RuntimeException('Failed to fetch jobs from API');
-                }
-
-                return [
-                    'jobs' => $responseData['payload'] ?? [],
-                    'pagination' => [
-                        'current_page' => $page,
-                        'per_page' => $limit,
-                        'total_jobs' => $responseData['meta']['entries_total'] ?? count($responseData['payload'] ?? []),
-                        'total_pages' => max(1, ceil(($responseData['meta']['entries_total'] ?? count($responseData['payload'] ?? [])) / $limit)),
-                    ]
-                ];
-            } catch (HttpExceptionInterface $e) {
-                throw new RuntimeException('Chyba při komunikaci s API: ' . $e->getMessage());
+            if ($response->getStatusCode() !== 200) {
+                throw new RuntimeException('Failed to fetch jobs from API');
             }
-        });
+
+            $responseData = json_decode($response->getContent(false), true);
+
+            // Extract job list and meta data
+            $jobs = $responseData['payload'] ?? [];
+            $totalJobs = $responseData['meta']['entries_total'] ?? count($jobs);
+            $totalPages = max(1, ceil($totalJobs / $limit));
+
+            return [
+                'jobs' => $jobs,
+                'pagination' => [
+                    'current_page' => $page,
+                    'per_page' => $limit,
+                    'total_jobs' => $totalJobs,
+                    'total_pages' => $totalPages,
+                ]
+            ];
+        } catch (HttpExceptionInterface $e) {
+            throw new RuntimeException('Chyba při komunikaci s API: ' . $e->getMessage());
+        }
     }
 
+    /**
+     * Fetch job details from the Recruitis API.
+     */
     public function fetchJobDetail(int $jobId): array
     {
-        $cacheKey = "job_detail_{$jobId}";
+        try {
+            $response = $this->httpClient->request('GET', $this->apiUrl . 'jobs/' . $jobId, [
+                'headers' => $this->getApiHeaders(),
+            ]);
 
-        return $this->cache->get($cacheKey, function () use ($jobId) {
-            try {
-                $response = $this->httpClient->request('GET', $this->apiUrl . 'jobs/' . $jobId, [
-                    'headers' => $this->getApiHeaders(),
-                ]);
-
-                if ($response->getStatusCode() !== 200) {
-                    throw new RuntimeException("Job not found (ID: $jobId)");
-                }
-
-                return json_decode($response->getContent(false), true);
-
-            } catch (HttpExceptionInterface $e) {
-                throw new RuntimeException('Error fetching job details: ' . $e->getMessage());
+            if ($response->getStatusCode() !== 200) {
+                throw new RuntimeException("Job not found (ID: $jobId)");
             }
-        });
+
+            return json_decode($response->getContent(false), true);
+        } catch (HttpExceptionInterface $e) {
+            throw new RuntimeException('Error fetching job details: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -103,30 +91,14 @@ class RecruitisApiService
      */
     public function submitJobApplication(array $data): array
     {
-        try {
-            $postData = $this->preparePostData($data);
+        $postData = $this->preparePostData($data);
 
-            $response = $this->httpClient->request('POST', $this->apiUrl . 'answers', [
-                'headers' => $this->getApiHeaders(),
-                'json' => $postData,
-            ]);
+        $response = $this->httpClient->request('POST', $this->apiUrl . 'answers', [
+            'headers' => $this->getApiHeaders(),
+            'json' => $postData,
+        ]);
 
-            return $this->handleResponse($response);
-        } catch (HttpExceptionInterface $e) {
-            throw new RuntimeException('Chyba při komunikaci s API: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Get API request headers.
-     */
-    private function getApiHeaders(): array
-    {
-        return [
-            'Authorization' => 'Bearer ' . $this->apiToken,
-            'Accept' => 'application/json',
-            'Content-Type' => 'application/json',
-        ];
+        return $this->handleResponse($response);
     }
 
     /**
@@ -201,6 +173,18 @@ class RecruitisApiService
             'error' => $responseData['error'] ?? 'Nepodařilo se odeslat odpověď.',
             'details' => $responseData,
             'flash' => 'error'
+        ];
+    }
+
+    /**
+     * Get API request headers.
+     */
+    private function getApiHeaders(): array
+    {
+        return [
+            'Authorization' => 'Bearer ' . $this->apiToken,
+            'Accept' => 'application/json',
+            'Content-Type' => 'application/json',
         ];
     }
 }
