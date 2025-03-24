@@ -8,7 +8,7 @@ class JobCacheService
 {
     public function __construct(
         private readonly CacheInterface $cache,
-        private readonly int $cacheDuration // Inject cache duration
+        private readonly int $cacheDuration
     ) {}
 
     public function getJobs(int $page, int $limit, callable $fetchFunction): array

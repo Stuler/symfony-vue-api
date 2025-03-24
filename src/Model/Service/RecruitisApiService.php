@@ -47,7 +47,6 @@ class RecruitisApiService
 
             $responseData = json_decode($response->getContent(false), true);
 
-            // Extract job list and meta data
             $jobs = $responseData['payload'] ?? [];
             $totalJobs = $responseData['meta']['entries_total'] ?? count($jobs);
             $totalPages = max(1, ceil($totalJobs / $limit));
@@ -80,7 +79,8 @@ class RecruitisApiService
                 throw new RuntimeException("Job not found (ID: $jobId)");
             }
 
-            return json_decode($response->getContent(false), true);
+            $data = json_decode($response->getContent(false), true);
+            return $data['payload'] ?? [];
         } catch (HttpExceptionInterface $e) {
             throw new RuntimeException('Error fetching job details: ' . $e->getMessage());
         }
@@ -133,7 +133,7 @@ class RecruitisApiService
         }
 
         return [
-            "amount" => (int) $salary['min'], // Minimum salary as base amount
+            "amount" => (int) $salary['min'],
             "currency" => $salary['currency'] ?? "CZK",
             "unit" => $salary['unit'] ?? "month",
             "note" => $salary['note'] ?? "",

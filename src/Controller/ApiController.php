@@ -39,7 +39,7 @@ class ApiController extends AbstractController
     {
         try {
             $job = $this->jobService->getJobDetail($jobId);
-            return new JsonResponse($job['payload'] ?? []);
+            return new JsonResponse($job);
         } catch (\RuntimeException $e) {
             return new JsonResponse(['error' => $e->getMessage()], 404);
         }
