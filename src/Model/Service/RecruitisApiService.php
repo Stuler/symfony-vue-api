@@ -75,6 +75,25 @@ class RecruitisApiService
         }
     }
 
+    public function fetchJobDetail(int $jobId): array
+    {
+        try {
+            $response = $this->httpClient->request('GET', $this->apiUrl . 'jobs/' . $jobId, [
+                'headers' => $this->getApiHeaders(),
+            ]);
+
+            if ($response->getStatusCode() !== 200) {
+                throw new RuntimeException('Job not found');
+            }
+
+            return json_decode($response->getContent(false), true);
+
+        } catch (HttpExceptionInterface $e) {
+            throw new RuntimeException('Error fetching job details: ' . $e->getMessage());
+        }
+    }
+
+
     /**
      * Submit job application to Recruitis API.
      */

@@ -4,29 +4,23 @@
 
     <div v-if="loading" class="alert alert-info text-center">Nahrávam nabídky...</div>
 
-    <div v-if="jobs.length" class="row">
-      <div class="col-md-6" v-for="job in jobs" :key="job.job_id">
-        <div class="card mb-4 shadow-sm">
-          <div class="card-body">
-            <h5 class="card-title">{{ job.title }}</h5>
-            <p class="text-muted"><strong>Created:</strong> {{ formatDate(job.date_created) }}</p>
-            <p class="text-muted"><strong>Location:</strong> {{ getLocation(job.addresses) }}</p>
-
-            <div v-html="sanitizeHTML(job.description)" class="job-description"></div>
-
-            <router-link
-                :to="{ name: 'jobAnswer', params: { jobId: job.job_id }, state: { jobTitle: job.title } }"
-                class="btn btn-primary mt-3">
-              Odpovědět na nabídku
-            </router-link>
-
-
-          </div>
-        </div>
-      </div>
+    <div v-if="jobs.length" class="list-group">
+      <router-link
+          v-for="job in jobs"
+          :key="job.job_id"
+          :to="{ name: 'jobDetail', params: { jobId: job.job_id } }"
+          class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+      >
+        <span>{{ job.title }}</span>
+        <span class="badge bg-primary">
+          {{ formatSalary(job.salary) }}
+        </span>
+      </router-link>
     </div>
 
-    <div v-else-if="!loading" class="alert alert-warning text-center">Žádná nabídka nebyla nalezena</div>
+    <div v-else-if="!loading" class="alert alert-warning text-center">
+      Žádná nabídka nebyla nalezena
+    </div>
 
     <!-- Pagination -->
     <nav aria-label="Job pagination" class="mt-4">
@@ -46,15 +40,12 @@
 </template>
 
 <script>
-import DOMPurify from "dompurify";
-
 export default {
   data() {
     return {
       jobs: [],
       currentPage: 1,
       totalPages: 1,
-      totalJobs: 0,
       limit: 10,
       loading: false
     };
@@ -70,11 +61,8 @@ export default {
         if (!response.ok) throw new Error("Failed to fetch jobs");
 
         const data = await response.json();
-
         this.jobs = data.jobs || [];
         this.totalPages = data.pagination?.total_pages || 1;
-        this.totalJobs = data.pagination?.total_jobs || 0;
-
       } catch (error) {
         console.error("Error fetching jobs:", error);
       } finally {
@@ -85,77 +73,34 @@ export default {
       if (this.currentPage > 1) {
         this.currentPage--;
         await this.fetchJobs();
-        this.scrollToTop();
       }
     },
     async nextPage() {
       if (this.currentPage < this.totalPages) {
         this.currentPage++;
         await this.fetchJobs();
-        this.scrollToTop();
       }
     },
-    scrollToTop() {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    },
-    formatDate(dateStr) {
-      return new Date(dateStr).toLocaleDateString();
-    },
-    getLocation(addresses) {
-      if (!addresses || addresses.length === 0) return "Unknown";
-      const primaryAddress = addresses.find(addr => addr.is_primary) || addresses[0];
-      return `${primaryAddress.city}, ${primaryAddress.state}`;
-    },
-    sanitizeHTML(html) {
-      let doc = new DOMParser().parseFromString(html, "text/html");
-      let links = doc.querySelectorAll("a");
-
-      links.forEach(link => {
-        let href = link.getAttribute("href");
-        if (href && !href.startsWith("http://") && !href.startsWith("https://")) {
-          link.setAttribute("href", "https://" + href);
-        }
-      });
-
-      return DOMPurify.sanitize(doc.body.innerHTML);
+    /**
+     * Format salary details.
+     */
+    formatSalary(salary) {
+      if (!salary || !salary.visible) {
+        return "Mzda neuvedena";
+      }
+      let min = salary.is_min_visible ? salary.min + " " : "";
+      let max = salary.is_max_visible ? salary.max + " " : "";
+      return `${min}${max}${salary.currency} / ${salary.unit}`;
     }
   }
 };
 </script>
 
 <style>
-.job-list {
-  max-width: 800px;
-  margin: auto;
-  padding: 20px;
+.list-group-item {
+  font-size: 1.1em;
 }
-.job-item {
-  border-bottom: 1px solid #ddd;
-  padding: 10px 0;
-}
-.pagination {
-  margin-top: 20px;
-}
-button {
-  margin: 5px;
-  padding: 8px;
-  cursor: pointer;
-}
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Frame around images */
-.job-description img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin: 10px auto;
-  border: 1px solid #0c0b0b;
-  border-radius: 10px; /* Rounded corners */
-  padding: 5px;
-  background: #ffffff;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+.badge {
+  font-size: 0.9em;
 }
 </style>

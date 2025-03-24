@@ -38,6 +38,18 @@ class ApiController extends AbstractController
         }
     }
 
+    #[Route('/api/jobs/{jobId}', name: 'api_job_detail', methods: ['GET'])]
+    public function getJobDetail(int $jobId): JsonResponse
+    {
+        try {
+            $job = $this->recruitisService->fetchJobDetail($jobId);
+            return new JsonResponse($job['payload'] ?? []);
+        } catch (\RuntimeException $e) {
+            return new JsonResponse(['error' => $e->getMessage()], 404);
+        }
+    }
+
+
     #[Route('/api/respond', name: 'api_respond', methods: ['POST'])]
     public function respondToJob(Request $request): JsonResponse
     {

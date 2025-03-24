@@ -1,15 +1,12 @@
-import { createRouter, createWebHistory } from 'vue-router';
-import JobList from './components/JobList.vue';
-import JobAnswer from './components/JobAnswer.vue';
+import { createRouter, createWebHistory } from "vue-router";
+import JobList from "./components/JobList.vue";
+import JobDetail from "./components/JobDetail.vue";
+import JobAnswer from "./components/JobAnswer.vue";
 
 const routes = [
-    { path: '/', component: JobList },
-    {
-        path: '/job-answer/:jobId',
-        name: 'jobAnswer',
-        component: JobAnswer,
-        props: route => ({ jobId: route.params.jobId, jobTitle: history.state.jobTitle })
-    }
+    { path: "/", name: "jobList", component: JobList },
+    { path: "/job/:jobId", name: "jobDetail", component: JobDetail },
+    { path: "/job/:jobId/apply", name: "jobAnswer", component: JobAnswer }
 ];
 
 const router = createRouter({
