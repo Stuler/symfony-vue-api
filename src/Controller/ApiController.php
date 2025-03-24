@@ -3,18 +3,17 @@
 namespace App\Controller;
 
 use App\Model\Service\RecruitisApiService;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Contracts\Cache\CacheInterface;
 
 class ApiController extends AbstractController
 {
     public function __construct(
         private readonly RecruitisApiService $recruitisService,
-        private readonly CacheInterface $cache
     ) {}
 
     #[Route('/', name: 'homepage', methods: ['GET'])]
@@ -30,10 +29,9 @@ class ApiController extends AbstractController
             $page = max(1, (int)$request->query->get('page', 1));
             $limit = min(max(5, (int)$request->query->get('limit', 10)), 50);
 
-            $cacheKey = "jobs_{$page}_limit_{$limit}";
-            $data = $this->cache->get($cacheKey, fn() => $this->recruitisService->fetchJobs($page, $limit));
+            $data = $this->recruitisService->fetchJobs($page, $limit);
             return new JsonResponse($data);
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             return new JsonResponse(['error' => $e->getMessage()], 500);
         }
     }
@@ -44,11 +42,10 @@ class ApiController extends AbstractController
         try {
             $job = $this->recruitisService->fetchJobDetail($jobId);
             return new JsonResponse($job['payload'] ?? []);
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             return new JsonResponse(['error' => $e->getMessage()], 404);
         }
     }
-
 
     #[Route('/api/respond', name: 'api_respond', methods: ['POST'])]
     public function respondToJob(Request $request): JsonResponse
@@ -68,7 +65,7 @@ class ApiController extends AbstractController
         try {
             $response = $this->recruitisService->submitJobApplication($data);
             return new JsonResponse($response, $response['success'] ? 201 : 400);
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             return new JsonResponse(['error' => $e->getMessage()], 500);
         }
     }
