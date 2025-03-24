@@ -59,9 +59,8 @@
   </div>
 </template>
 
-
 <script>
-import FlashMessage from "../components/FlashMessage.vue"; // Import Flash Message
+import FlashMessage from "../components/FlashMessage.vue";
 
 export default {
   components: { FlashMessage },
@@ -69,16 +68,12 @@ export default {
   data() {
     return {
       response: {
-        job_id: this.jobId,
+        job_id: null,
         name: "",
         email: "",
         phone: "",
         linkedin: "",
-        salary: {
-          amount: null,
-          currency: "CZK",
-          unit: "month"
-        },
+        salary: { amount: null, currency: "CZK", unit: "month" },
         gdpr_agreement: true,
         attachments: []
       },
@@ -86,6 +81,11 @@ export default {
       flashType: "success",
       error: null
     };
+  },
+  mounted() {
+    // ensure job_id is set properly
+    this.response.job_id = this.jobId || this.$route.params.jobId || null;
+    console.log("Job ID Set:", this.response.job_id);
   },
   methods: {
     async submitResponse() {
@@ -99,11 +99,10 @@ export default {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Odpověď se nepodařilo odeslat.");
 
-        // Show Flash Message
         this.flashMessage = "Odpověď byla úspěšně odeslána!";
         this.flashType = "success";
 
-        // Hide message after 3 seconds & redirect
+        // redirect After 3 Seconds
         setTimeout(() => {
           this.flashMessage = null;
           this.$router.push("/");
