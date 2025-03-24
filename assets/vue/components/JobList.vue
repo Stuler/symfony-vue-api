@@ -2,7 +2,7 @@
   <div class="container mt-4">
     <h1 class="text-center">Seznam nabídek</h1>
 
-    <div v-if="loading" class="alert alert-info text-center">Nahrávam nabídky...</div>
+    <div v-if="loading" class="alert alert-info text-center">Nahrávám nabídky...</div>
 
     <div v-if="jobs.length" class="list-group">
       <router-link
@@ -22,20 +22,33 @@
       Žádná nabídka nebyla nalezena
     </div>
 
-    <!-- Pagination -->
-    <nav aria-label="Job pagination" class="mt-4">
-      <ul class="pagination justify-content-center">
-        <li class="page-item" :class="{ disabled: currentPage === 1 }">
-          <button class="page-link" @click="prevPage">Předchozí</button>
-        </li>
-        <li class="page-item disabled">
-          <span class="page-link">Strana {{ currentPage }} z {{ totalPages }}</span>
-        </li>
-        <li class="page-item" :class="{ disabled: currentPage >= totalPages }">
-          <button class="page-link" @click="nextPage">Další</button>
-        </li>
-      </ul>
-    </nav>
+    <!-- pagination + Jobs Per Page Controls -->
+    <div class="d-flex justify-content-between align-items-center mt-4">
+      <!-- Pagination Controls -->
+      <nav aria-label="Job pagination">
+        <ul class="pagination">
+          <li class="page-item" :class="{ disabled: currentPage === 1 }">
+            <button class="page-link" @click="prevPage">Předchozí</button>
+          </li>
+          <li class="page-item disabled">
+            <span class="page-link">Strana {{ currentPage }} z {{ totalPages }}</span>
+          </li>
+          <li class="page-item" :class="{ disabled: currentPage >= totalPages }">
+            <button class="page-link" @click="nextPage">Další</button>
+          </li>
+        </ul>
+      </nav>
+
+      <!-- dropdown for selecting jobs per page -->
+      <div class="d-flex align-items-center">
+        <label for="jobsPerPage" class="me-2">Počet nabídek:</label>
+        <select id="jobsPerPage" class="form-select w-auto" v-model="limit" @change="changeLimit">
+          <option v-for="option in [5, 10, 25, 50]" :key="option" :value="option">
+            {{ option }}
+          </option>
+        </select>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -81,9 +94,10 @@ export default {
         await this.fetchJobs();
       }
     },
-    /**
-     * Format salary details.
-     */
+    async changeLimit() {
+      this.currentPage = 1;
+      await this.fetchJobs();
+    },
     formatSalary(salary) {
       if (!salary || !salary.visible) {
         return "Mzda neuvedena";
@@ -102,5 +116,11 @@ export default {
 }
 .badge {
   font-size: 0.9em;
+}
+.pagination {
+  margin-bottom: 0;
+}
+.form-select {
+  min-width: 80px;
 }
 </style>
